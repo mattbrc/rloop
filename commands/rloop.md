@@ -534,12 +534,21 @@ and determine whether they pass and what the metric value is.
      and how to extract the metric
 
 2. **Execute the test procedure**
-   - Run the commands specified in the test prompt
+   - Run any **setup steps** defined in the test prompt (database migrations, config changes, etc.)
+   - Run the test/benchmark commands
    - Analyze outputs and logs as instructed
    - Determine pass/fail based on the criteria in the test prompt
    - Extract the metric value as described in the test prompt
 
-3. **Write your result** to `experiments/current/eval_result.json`:
+3. **Run cleanup/rollback steps (always)**
+   - If the test prompt defines a "Cleanup" or "Rollback" section, **always run it** —
+     whether tests passed or failed
+   - This is critical for reverting side effects like database migrations, applied SQL scripts,
+     config changes, seeded data, or started services
+   - If cleanup fails, note it in `eval_result.json` notes but do NOT change the pass/fail
+     result — cleanup failure is an operational issue, not a test result
+
+4. **Write your result** to `experiments/current/eval_result.json`:
 
 ```json
 {

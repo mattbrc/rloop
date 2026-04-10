@@ -48,6 +48,17 @@ Ask all of these in a **single message**. Be concise.
    These pre-test steps go into `test_prompt.md` so the eval agent handles them
    automatically before running the actual tests.
 
+   - **Do any of those setup steps need to be undone if the experiment fails?**
+     For example:
+     - Reverting a SQL migration / stored procedure
+     - Restoring a database backup
+     - Resetting config files to previous state
+     - Stopping services that were started
+   
+   These go into a "Cleanup" section at the end of `test_prompt.md`. The eval agent
+   runs cleanup **every time** — pass or fail — so side effects don't leak between
+   experiments.
+
    Explain the two-gate system:
    > "rloop uses two gates to accept an experiment. First, the eval agent follows your
    > test_prompt.md and uses its judgment to decide pass/fail — this is where you define
@@ -140,6 +151,10 @@ literally. Structure it as:
 - `metric_value` = <what to use>
 - `passed` = <all conditions that must be true>
 - `notes` = <what to include — key log lines, metric context, etc.>
+
+## Cleanup (always runs)
+<Steps to revert any side effects — database rollbacks, config restoration, etc.>
+<These run whether the experiment passed or failed>
 ```
 
 Guidelines for writing a good test prompt:
