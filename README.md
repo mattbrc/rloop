@@ -37,6 +37,15 @@ Fetches the latest command files from GitHub, shows what changed, and installs t
 
 In any project, type `/rloop-init` in Claude Code. If it responds, you're set.
 
+## Commands
+
+| Command | Purpose |
+|---------|---------|
+| `/rloop-init` | Interactive setup — explores your repo, asks questions, generates config + test prompt + permissions |
+| `/rloop-check` | Preflight validation — checks config, source dir, test prompt, git state, permissions, lock file |
+| `/rloop` | Run the loop |
+| `/rloop-update` | Self-update from GitHub |
+
 ## Usage
 
 ### 1. Initialize in your project
@@ -49,15 +58,18 @@ This will:
 - Explore your repo to understand the stack
 - Ask what you're optimizing and how to test it
 - Generate `rloop.config.json`, `test_prompt.md`, and `experiments/` directory
+- Configure Claude Code permissions for autonomous operation
+- Walk you through every config option
 
-### 2. Preflight check (optional but recommended)
+### 2. Preflight check (recommended)
 
 ```
 /rloop-check
 ```
 
-Validates your setup before running: config syntax, source directory, test prompt
-quality, git state, build system detection. Reports PASS/WARN/FAIL for each check.
+Validates 9 areas before you start: config syntax, source directory, test prompt quality,
+lock file, git state, experiment log, experiments directory, build system, and permissions.
+Reports PASS/WARN/FAIL with actionable messages.
 
 ### 3. Run the loop
 
@@ -65,34 +77,10 @@ quality, git state, build system detection. Reports PASS/WARN/FAIL for each chec
 /rloop
 ```
 
-The loop runs autonomously:
-- Finds optimization opportunities in your code
-- Plans and implements changes
-- Tests them using your `test_prompt.md` procedure
-- Accepts improvements, rejects regressions
-- Commits accepted changes (if `auto_commit` is true)
-- Stops at your target, iteration limit, or when stuck
+### 4. Tune as needed
 
-### 3. Tune as needed
-
-Edit `rloop.config.json` to change constraints:
-
-```json
-{
-  "src_dir": "src",
-  "test_prompt": "test_prompt.md",
-  "optimize": "minimize",
-  "target_metric": 10.0,
-  "max_iterations": 5,
-  "max_consecutive_rejections": 3,
-  "allowed_categories": ["parallelism", "algorithm_complexity"],
-  "allowed_languages": ["go"],
-  "focus_phase": "data_processing",
-  "auto_commit": true
-}
-```
-
-Edit `test_prompt.md` to change how testing works.
+Edit `rloop.config.json` anytime — the orchestrator re-reads it at the start of each
+iteration, so changes take effect mid-loop.
 
 ## What goes in your project
 
@@ -101,45 +89,57 @@ After `/rloop-init`, your project gets:
 | File | Purpose | You edit it? |
 |------|---------|-------------|
 | `rloop.config.json` | Loop settings and constraints | Yes |
-| `test_prompt.md` | How to test your project (agent follows this) | Yes |
+| `test_prompt.md` | Your test procedure (eval agent follows this) | Yes |
+| `.claude/settings.json` | Permissions for autonomous operation | Optional |
 | `experiment_log.jsonl` | History of every experiment (created during loop) | No (append-only) |
 | `experiments/` | Artifacts from each iteration (created during loop) | No |
+
+The framework itself lives in `~/.claude/commands/` — invisible to your repo.
 
 ## How it works
 
 ```
 /rloop
   │
-  ├── 1. Check stopping conditions (iteration limit, target, stuck?)
+  ├── Setup
+  │   ├── Acquire lock file (prevents concurrent runs)
+  │   ├── Create safety snapshot (git tag)
+  │   └── Start keep-awake (caffeinate/systemd-inhibit)
   │
-  ├── 2. Research agent
-  │      Reads experiment log + source code
-  │      Identifies highest-impact optimization
-  │      Writes: experiments/current/research.md
+  ├── For each iteration:
+  │   │
+  │   ├── 1. Check stopping conditions
+  │   │      Iteration limit? Target achieved? Stuck?
+  │   │
+  │   ├── 2. Re-read config (picks up mid-loop changes)
+  │   │
+  │   ├── 3. Research agent (skippable via mode)
+  │   │      Reads experiment log + source code
+  │   │      Identifies highest-impact optimization
+  │   │
+  │   ├── 4. Plan agent (skippable via mode)
+  │   │      Designs concrete implementation
+  │   │
+  │   ├── 5. Create experiment branch (if configured)
+  │   │
+  │   ├── 6. Build agent (skippable via mode)
+  │   │      Implements the changes
+  │   │
+  │   ├── 7. Evaluate agent
+  │   │      Follows YOUR test_prompt.md
+  │   │      Runs tests, analyzes logs, extracts metric
+  │   │
+  │   ├── 8. Accept or reject
+  │   │      Tests passed + metric improved → accept + commit
+  │   │      Tests passed + metric worse   → reject + rollback
+  │   │      Tests failed                  → fail + rollback
+  │   │
+  │   └── 9. Archive artifacts
   │
-  ├── 3. Plan agent
-  │      Reads research memo
-  │      Designs concrete implementation
-  │      Writes: experiments/current/plan.md
-  │
-  ├── 4. Build agent
-  │      Reads plan
-  │      Implements the changes
-  │      Writes: experiments/current/build_report.md
-  │
-  ├── 5. Evaluate agent
-  │      Reads YOUR test_prompt.md
-  │      Runs your test procedure
-  │      Writes: experiments/current/eval_result.json
-  │
-  ├── 6. Accept or reject
-  │      Metric improved? → commit + accept
-  │      Metric worse?    → git reset + reject
-  │      Tests failed?    → git reset + fail
-  │
-  ├── 7. Archive artifacts
-  │
-  └── 8. Loop back to 1
+  └── Cleanup
+      ├── Print session summary (table of all experiments + token usage)
+      ├── Release lock file
+      └── Stop keep-awake
 ```
 
 ## How experiments are accepted or rejected
@@ -169,6 +169,28 @@ If the metric didn't improve, the experiment is rejected even though tests passe
 **Both gates must pass.** An experiment with great metrics but log errors → failed.
 An experiment with clean logs but worse metrics → rejected. Only clean tests AND
 an improved metric → accepted.
+
+## Safety features
+
+- **Safety snapshot** — git tag created before the first iteration. Always there to return to.
+- **Lock file** — `.rloop.lock` prevents concurrent runs. Detects stale locks from crashed sessions.
+- **Iteration timeout** — aborts an iteration if it exceeds `iteration_timeout_min` (checked between phases, default 2 hours).
+- **Consecutive rejection pause** — after N failures in a row, stops and asks the user for guidance instead of burning tokens.
+- **Branch isolation** — optional `branch_per_experiment` keeps each experiment on its own branch. Failed branches are deleted, accepted ones are kept.
+- **Keep-awake** — auto-detects macOS/Windows/Linux and prevents machine sleep during long runs.
+- **Context management** — experiment logs over 20 entries are automatically summarized to keep agent context lean.
+- **Token tracking** — tracks input/output tokens per iteration and cumulative. Shown in session summary.
+
+## Phase modes
+
+Control which phases run via the `mode` config:
+
+| Mode | Phases | Use case |
+|------|--------|----------|
+| `"full"` | Research → Plan → Build → Evaluate | Default — fully autonomous |
+| `"plan+build+eval"` | Plan → Build → Evaluate | You provide the research (`experiments/current/research.md`) |
+| `"build+eval"` | Build → Evaluate | You provide the plan (`experiments/current/plan.md`) |
+| `"eval-only"` | Evaluate | Test current code state (great for validating your test_prompt) |
 
 ## Example test_prompt.md
 
@@ -247,10 +269,14 @@ notes = include comparison output and any warnings
 | `branch_per_experiment` | `false` | Isolate each experiment on its own branch |
 | `branch_prefix` | `"experiment"` | Branch naming (e.g. `experiment/1`) |
 
+All fields are optional — defaults apply when omitted or null. Config is re-read each
+iteration, so you can change settings mid-loop.
+
 ## Optimization categories
 
-These are the categories the research agent uses to classify optimization approaches.
-Use `allowed_categories` in config to restrict which ones the agent explores.
+The research agent classifies each optimization into a category. Use `allowed_categories`
+in config to restrict which ones the agent explores. These are not exhaustive — the agent
+can define its own if none fit.
 
 **Performance**
 - **caching** — memoization, precomputation, lookup tables
@@ -279,5 +305,3 @@ Use `allowed_categories` in config to restrict which ones the agent explores.
 **Tuning**
 - **configuration_tuning** — adjusting thresholds, parameters, hyperparameters
 - **model_tuning** — hyperparameters, feature selection, training strategies
-
-These are not exhaustive — the research agent can define its own category if none fit.
