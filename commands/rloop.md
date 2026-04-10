@@ -11,6 +11,32 @@ Before starting, verify these files exist in the current project:
 
 Create `experiments/current/` and `experiments/archive/` directories if they don't exist.
 
+If `branch_per_experiment` is true, save the current branch name as the **base branch**:
+```bash
+git rev-parse --abbrev-ref HEAD
+```
+All experiment branches will be created from and return to this branch.
+
+## Prevent Sleep
+
+The loop can run for hours. Prevent the machine from sleeping by starting a background
+keep-awake process before the first iteration.
+
+**Detect the platform** and run the appropriate command in the background:
+
+- **macOS**: `caffeinate -dims &` (prevents display sleep, idle sleep, and system sleep)
+- **Windows (WSL/PowerShell)**: `powershell.exe -Command "& { while (\$true) { [System.Windows.Forms.SendKeys]::SendWait('{F15}'); Start-Sleep -Seconds 60 } }" &`
+- **Linux**: `systemd-inhibit --what=idle --who=rloop --why="rloop running" sleep infinity &`
+
+Save the PID of the background process. When the loop exits (target reached, iteration limit,
+or user stops it), kill the process:
+
+```bash
+kill <saved_pid> 2>/dev/null
+```
+
+Tell the user: `"Keep-awake enabled (caffeinate/inhibit). Will disable when loop exits."`
+
 ## Configuration
 
 Read `rloop.config.json` for user-defined constraints:
@@ -26,7 +52,10 @@ Read `rloop.config.json` for user-defined constraints:
 | `allowed_categories` | `[]` | If non-empty, only explore these optimization categories |
 | `allowed_languages` | `[]` | If non-empty, only use these languages |
 | `focus_phase` | `null` | If set, prioritize this area of the codebase |
-| `auto_commit` | `true` | Automatically commit accepted experiments |
+| `auto_commit` | `true` | Automatically git commit accepted experiments |
+| `auto_push` | `false` | Automatically git push after committing (requires `auto_commit`) |
+| `branch_per_experiment` | `false` | Create a new branch for each experiment |
+| `branch_prefix` | `"experiment"` | Branch naming prefix (e.g. `experiment/1`, `experiment/2`) |
 
 ## The Loop
 
@@ -36,16 +65,54 @@ For each iteration:
 
 Before starting a new iteration, check:
 
-- **Iteration limit**: If `max_iterations` is set and you've completed that many iterations, stop.
-  Print: `"Reached max_iterations (N). Stopping."`
+- **Iteration limit**: If `max_iterations` is set and you've completed that many iterations,
+  kill the keep-awake process, print the **Session Summary** (see below), and stop.
 - **Target achieved**: Read `experiment_log.jsonl` — if the latest accepted metric meets or
-  exceeds `target_metric` (respecting `optimize` direction), stop.
-  Print: `"Target metric achieved (X). Stopping."`
+  exceeds `target_metric` (respecting `optimize` direction), kill the keep-awake process,
+  print the **Session Summary**, and stop.
 - **Consecutive rejections**: If the last N experiments were all rejected or errored (where N =
-  `max_consecutive_rejections`), pause and ask the user what to try next. Do NOT continue
-  autonomously — the loop is stuck and needs human input.
+  `max_consecutive_rejections`), kill the keep-awake process, print the **Session Summary**,
+  then pause and ask the user what to try next. Do NOT continue autonomously — the loop is
+  stuck and needs human input. (Re-start keep-awake if the user provides new direction and
+  the loop resumes.)
 
 If none of these apply, proceed.
+
+### Session Summary
+
+When the loop exits for any reason, read `experiment_log.jsonl` and print a summary of
+all experiments from this session. Format it as a table:
+
+```
+═══════════════════════════════════════════════════════════════
+  rloop Session Summary
+═══════════════════════════════════════════════════════════════
+
+  #   Status     Metric    Description
+  ─   ──────     ──────    ───────────
+  1   accepted   225.0s    baseline
+  2   accepted    98.3s    replace linear scans with hash lookups
+  3   rejected   102.1s    parallelize income classification
+  4   accepted    71.5s    remove redundant JSON serialization
+  5   failed       —       rewrite state apportioner (build error)
+
+  Results: 3 accepted, 1 rejected, 1 failed
+  Best metric: 71.5s (from experiment #4)
+  Improvement: 225.0 → 71.5 (68.2% reduction)
+
+  Accepted branches: (if branch_per_experiment is true)
+    experiment/1  — baseline
+    experiment/2  — replace linear scans with hash lookups
+    experiment/4  — remove redundant JSON serialization
+═══════════════════════════════════════════════════════════════
+```
+
+Adapt the format to the `optimize` direction:
+- For `"minimize"`: show reduction percentage (e.g. "68.2% reduction")
+- For `"maximize"`: show increase percentage (e.g. "34.1% increase")
+
+Only include the "Accepted branches" section if `branch_per_experiment` is true.
+Only include the "Improvement" line if there are at least 2 accepted experiments.
 
 ### 2. Read Current State
 
@@ -76,7 +143,18 @@ Spawn a subagent with the Agent tool:
 
 Wait for the agent to complete. Read `experiments/current/plan.md`.
 
-### 5. Build Phase
+### 5. Create Experiment Branch (if configured)
+
+If `branch_per_experiment` is true:
+```bash
+git checkout <base_branch>
+git checkout -b <branch_prefix>/<experiment_id>
+```
+For example, with the default prefix: `experiment/1`, `experiment/2`, etc.
+
+If `branch_per_experiment` is false, stay on the current branch.
+
+### 6. Build Phase
 
 Spawn a subagent with the Agent tool:
 
@@ -88,7 +166,7 @@ Spawn a subagent with the Agent tool:
 
 Wait for the agent to complete. Read `experiments/current/build_report.md`.
 
-### 6. Evaluate Phase
+### 7. Evaluate Phase
 
 Spawn a subagent with the Agent tool:
 
@@ -101,7 +179,7 @@ Spawn a subagent with the Agent tool:
 
 Wait for the agent to complete. Read `experiments/current/eval_result.json`.
 
-### 7. Handle the Result
+### 8. Handle the Result
 
 Read `experiments/current/eval_result.json`. It must contain:
 
@@ -139,21 +217,40 @@ If the file doesn't exist, start at 1. Get `git_sha` via `git rev-parse --short 
   - If first experiment (no best yet) → `"accepted"`
   - Otherwise → `"rejected"`. Increment consecutive rejection counter.
 
-**If accepted** and `auto_commit` is true:
-```bash
-git add <src_dir>/
-git commit -m "<description from plan>"
-```
-If `auto_commit` is false, tell the user the experiment was accepted and let them decide.
+**If accepted:**
+
+- If `auto_commit` is true:
+  ```bash
+  git add <src_dir>/
+  git commit -m "<description from plan>"
+  ```
+  If `auto_push` is also true:
+  ```bash
+  git push -u origin HEAD
+  ```
+- If `auto_commit` is false, tell the user the experiment was accepted and let them decide
+  what to do (commit, review changes, discard, etc.). Do NOT commit or push.
+- If `branch_per_experiment` is true, return to the base branch after handling:
+  ```bash
+  git checkout <base_branch>
+  ```
 
 **If rejected or failed:**
-```bash
-git reset --hard HEAD
-```
+
+- If `branch_per_experiment` is true:
+  ```bash
+  git checkout <base_branch>
+  git branch -D <branch_prefix>/<experiment_id>
+  ```
+  This discards the failed experiment branch entirely.
+- If `branch_per_experiment` is false:
+  ```bash
+  git reset --hard HEAD
+  ```
 
 Reset the consecutive rejection counter on any accepted experiment.
 
-### 8. Archive Artifacts
+### 9. Archive Artifacts
 
 ```bash
 mkdir -p experiments/archive/<experiment_id>
@@ -162,7 +259,7 @@ rm experiments/current/research.md experiments/current/plan.md \
    experiments/current/build_report.md experiments/current/eval_result.json
 ```
 
-### 9. Loop
+### 10. Loop
 
 Go back to step 1 (which checks stopping conditions before continuing).
 

@@ -13,15 +13,24 @@ rejects regressions, stops when it hits your target or gets stuck.
 
 Tell Claude Code:
 
-> Install rloop from this repo — copy the two command files to ~/.claude/commands/
+> Install rloop from this repo — copy the command files to ~/.claude/commands/
 
 Or manually:
 
 ```bash
 git clone https://github.com/fortyau/rloop.git
 cp rloop/commands/rloop-init.md ~/.claude/commands/
+cp rloop/commands/rloop-check.md ~/.claude/commands/
 cp rloop/commands/rloop.md ~/.claude/commands/
 ```
+
+### Update
+
+```
+/rloop-update
+```
+
+Fetches the latest command files from GitHub, shows what changed, and installs them.
 
 ### Verify
 
@@ -40,7 +49,16 @@ This will:
 - Ask what you're optimizing and how to test it
 - Generate `rloop.config.json`, `test_prompt.md`, and `experiments/` directory
 
-### 2. Run the loop
+### 2. Preflight check (optional but recommended)
+
+```
+/rloop-check
+```
+
+Validates your setup before running: config syntax, source directory, test prompt
+quality, git state, build system detection. Reports PASS/WARN/FAIL for each check.
+
+### 3. Run the loop
 
 ```
 /rloop
@@ -122,6 +140,34 @@ After `/rloop-init`, your project gets:
   │
   └── 8. Loop back to 1
 ```
+
+## How experiments are accepted or rejected
+
+Every experiment must clear **two gates** to be accepted:
+
+**Gate 1 — Qualitative (test_prompt.md)**
+
+The eval agent follows your test prompt and uses its judgment to decide `passed: true/false`.
+This is where you define what "correct" means for your project:
+
+- Did all commands complete without errors?
+- Do the logs show expected output patterns?
+- Are there any warnings about data corruption, missing records, regressions?
+- Does the output look reasonable?
+
+The agent can analyze messy log output, interpret ambiguous results, and catch subtle
+issues that a simple script would miss. If anything looks wrong, it sets `passed: false`
+regardless of the metric.
+
+**Gate 2 — Quantitative (rloop.config.json)**
+
+The orchestrator compares `metric_value` from the eval result against the previous best.
+If `optimize` is `"minimize"`, the metric must go down. If `"maximize"`, it must go up.
+If the metric didn't improve, the experiment is rejected even though tests passed.
+
+**Both gates must pass.** An experiment with great metrics but log errors → failed.
+An experiment with clean logs but worse metrics → rejected. Only clean tests AND
+an improved metric → accepted.
 
 ## Example test_prompt.md
 

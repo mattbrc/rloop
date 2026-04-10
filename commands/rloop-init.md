@@ -34,8 +34,19 @@ Ask all of these in a **single message**. Be concise.
 4. **How do you test/evaluate a change?** Ask them to walk you through:
    - What commands to run (in order — build, test, benchmark, etc.)
    - What to look for in the output (success messages, error patterns, metric values)
-   - What determines pass/fail
    - Where/how the metric value appears in the output
+   - Beyond the metric number, what qualitative checks should pass?
+     (e.g., no error lines in logs, no data corruption warnings, no regressions
+     in specific categories)
+
+   Explain the two-gate system:
+   > "rloop uses two gates to accept an experiment. First, the eval agent follows your
+   > test_prompt.md and uses its judgment to decide pass/fail — this is where you define
+   > qualitative criteria like 'no errors in logs' or 'no regressions in any category.'
+   > Second, the orchestrator checks whether the metric improved. Both must pass.
+   > So even if accuracy goes up, the experiment fails if the agent spotted data corruption
+   > in the logs. This gives you precise control over what 'good' means."
+
 5. **Any constraints?** (languages to restrict to, optimization categories to focus on, iteration limit, target metric value)
 
 ### 4. Generate the files
@@ -55,7 +66,10 @@ Based on their answers, generate these files:
   "allowed_categories": [],
   "allowed_languages": [],
   "focus_phase": null,
-  "auto_commit": true
+  "auto_commit": true,
+  "auto_push": false,
+  "branch_per_experiment": false,
+  "branch_prefix": "experiment"
 }
 ```
 
@@ -160,8 +174,18 @@ How to control the loop (edit rloop.config.json anytime):
     "allowed_categories": ["parallelism", "caching"]  ← only these strategies
 
   Git:
-    "auto_commit": true          ← auto-commits accepted improvements
-    "auto_commit": false         ← tells you and lets you decide
+    "auto_commit": true              ← auto-commits accepted improvements
+    "auto_commit": false             ← tells you and lets you decide (no commit, no push)
+    "auto_push": false               ← (default) commits stay local
+    "auto_push": true                ← pushes to remote after each commit
+                                       (only works with auto_commit: true)
+
+  Branching:
+    "branch_per_experiment": false   ← (default) all work on current branch
+    "branch_per_experiment": true    ← each experiment gets its own branch
+    "branch_prefix": "experiment"    ← branches named experiment/1, experiment/2, ...
+                                       accepted branches are kept, failed ones are deleted
+                                       always returns to your starting branch between experiments
 
 You can change these between runs or even mid-loop (the orchestrator
 re-reads the config at the start of each iteration).
