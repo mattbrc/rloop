@@ -153,11 +153,18 @@ mkdir -p experiments/current experiments/archive
 
 Check if `.gitignore` exists. If it does, read it. If these entries are missing, add them:
 ```
-experiments/current/
+# rloop
+rloop.config.json
+test_prompt.md
+experiment_log.jsonl
+experiments/
 .rloop.lock
 ```
 If `.gitignore` doesn't exist, create it with these entries.
 Tell the user what was added.
+
+The goal is to keep all rloop files out of the project's git history — they are
+local configuration for the optimization loop, not part of the project source.
 
 ### 5. Show the summary
 

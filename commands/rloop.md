@@ -385,7 +385,17 @@ Read `rloop.config.json`. If present:
 
 ### Your Process
 
-1. **Read the experiment log** (`experiment_log.jsonl`)
+1. **Check previous research** (`experiments/archive/`)
+   - List the archive directories and read `research.md` from the most recent 3-5 experiments
+   - Look for **unused candidate approaches** — previous research often proposes 2-3 options
+     but only recommends one. The others are still viable for this iteration.
+   - Look for **lessons learned** in `build_report.md` from failed experiments —
+     these tell you what didn't work and why
+   - If a previous research memo identified a bottleneck that hasn't been addressed yet,
+     you can build on that analysis instead of starting from scratch
+   - Do NOT re-recommend an approach that was already tried and failed (check the experiment log)
+
+2. **Read the experiment log** (`experiment_log.jsonl`)
    - What has been tried? What worked, what failed?
    - What is the current best metric?
    - What categories have been explored? What hasn't been tried?
@@ -393,21 +403,23 @@ Read `rloop.config.json`. If present:
      the last 10 entries. Summarize the rest from the file structure
      (count lines, check statuses) rather than reading every entry.
 
-2. **Explore the source code** (in the configured `src_dir`)
+3. **Explore the source code** (in the configured `src_dir`)
    - Understand the current architecture and language
    - Find the code responsible for the biggest bottleneck or weakness
    - Identify specific inefficiencies or improvement opportunities
+   - If previous research already analyzed this area, focus on what's changed since then
 
-3. **Analyze the bottleneck**
+4. **Analyze the bottleneck**
    - Why is this area underperforming?
    - What is the algorithmic complexity?
    - What specific code patterns are causing waste?
 
-4. **Consider 2-3 candidate approaches**
+5. **Consider 2-3 candidate approaches**
    - What are different ways to address this?
    - What are the risks and expected gains of each?
+   - Prioritize unused candidates from previous research before inventing new ones
 
-5. **Write your findings** to `experiments/current/research.md`:
+6. **Write your findings** to `experiments/current/research.md`:
    - Target area and why
    - Analysis (specific code references)
    - 2-3 candidate approaches with trade-offs
