@@ -7,6 +7,29 @@ Four-phase loop: **Research** (find the bottleneck) → **Plan** (design the fix
 **Build** (implement it) → **Evaluate** (test and measure). Accepts improvements,
 rejects regressions, stops when it hits your target or gets stuck.
 
+## Features
+
+- **Any metric you can measure** — runtime, accuracy, memory, binary size, test pass rate, latency, throughput
+- **Two-gate acceptance** — every change must pass qualitative tests (your test procedure) *and* improve the metric to be accepted
+- **Configurable optimization direction** — minimize or maximize, with optional target threshold to stop at
+- **Flexible phase modes** — run the full loop, or skip phases (e.g. `eval-only` to validate your test prompt, `build+eval` to supply your own plan)
+- **Branch-per-experiment** — optionally isolate each attempt on its own git branch
+- **Mid-loop reconfiguration** — edit `rloop.config.json` between iterations to adjust focus, constraints, or limits
+- **Session summaries** — token usage tracking, experiment result tables, and improvement percentages
+
+## Safety
+
+- **Safety snapshot** — git tag created before the first iteration as a recovery point
+- **Automatic rollback** — failed experiments are rolled back via `git reset --hard` or branch deletion
+- **Lock file** — `.rloop.lock` prevents concurrent runs with PID tracking and stale-lock detection
+- **Consecutive rejection pause** — after N failures in a row (default 3), the loop pauses and asks you for guidance instead of burning tokens
+- **Iteration timeout** — aborts iterations exceeding a configurable time limit (default 2 hours)
+- **Preflight checks** — `/rloop-check` validates config, git state, permissions, test prompt, and build system before starting
+- **Context management** — experiment logs over 20 entries are automatically summarized (first entry + last 10) to prevent context bloat over long runs
+- **Token tracking** — tracks input/output tokens per iteration and cumulatively, reported after each iteration and in the session summary
+- **Token-optimized subagents** — each subagent receives only its own inlined instructions (~30 lines) rather than loading the full orchestrator file (~500 lines), and the orchestrator skims subagent outputs for decisions rather than reading full analyses
+- **Keep-awake** — prevents machine sleep during long autonomous sessions with automatic cleanup
+
 ## Install
 
 ### With Claude Code
@@ -177,17 +200,6 @@ If the metric didn't improve, the experiment is rejected even though tests passe
 **Both gates must pass.** An experiment with great metrics but log errors → failed.
 An experiment with clean logs but worse metrics → rejected. Only clean tests AND
 an improved metric → accepted.
-
-## Safety features
-
-- **Safety snapshot** — git tag created before the first iteration. Always there to return to.
-- **Lock file** — `.rloop.lock` prevents concurrent runs. Detects stale locks from crashed sessions.
-- **Iteration timeout** — aborts an iteration if it exceeds `iteration_timeout_min` (checked between phases, default 2 hours).
-- **Consecutive rejection pause** — after N failures in a row, stops and asks the user for guidance instead of burning tokens.
-- **Branch isolation** — optional `branch_per_experiment` keeps each experiment on its own branch. Failed branches are deleted, accepted ones are kept.
-- **Keep-awake** — auto-detects macOS/Windows/Linux and prevents machine sleep during long runs.
-- **Context management** — experiment logs over 20 entries are automatically summarized to keep agent context lean.
-- **Token tracking** — tracks input/output tokens per iteration and cumulative. Shown in session summary.
 
 ## Phase modes
 
