@@ -11,7 +11,33 @@ Before starting, verify these files exist in the current project:
 
 Create `experiments/current/` and `experiments/archive/` directories if they don't exist.
 
-If `branch_per_experiment` is true, save the current branch name as the **base branch**:
+### Lock File
+
+Check if `.rloop.lock` exists:
+- If it exists, read it. It contains a JSON object with `pid`, `started_at`, and `branch`.
+  - Check if the PID is still running: `kill -0 <pid> 2>/dev/null`
+  - If the process is still running: tell the user another rloop session is active and stop.
+    `"rloop is already running (PID <pid>, started <started_at>). Only one session per project."`
+  - If the process is NOT running: the lock is stale. Warn the user and remove it.
+    `"Removing stale lock file from a previous session."`
+- Create `.rloop.lock` with:
+  ```json
+  {"pid": <current_shell_pid>, "started_at": "<ISO 8601>", "branch": "<current_branch>"}
+  ```
+  Get the shell PID via `echo $$`.
+
+**IMPORTANT:** Remove `.rloop.lock` on every exit path — stopping conditions, errors,
+or user interruption. Every place that says "stop" or "pause" must remove the lock first.
+
+### Safety Snapshot
+
+Before the first iteration, create a git tag as a safety snapshot:
+```bash
+git tag rloop/snapshot-$(date +%Y%m%d-%H%M%S)
+```
+Tell the user: `"Safety snapshot created: rloop/snapshot-<timestamp>. You can always return here with git checkout <tag>."`
+
+If `branch_per_experiment` is true, also save the current branch name as the **base branch**:
 ```bash
 git rev-parse --abbrev-ref HEAD
 ```
@@ -49,6 +75,7 @@ Read `rloop.config.json` for user-defined constraints:
 | `target_metric` | `null` | Stop when metric reaches this value (null = no target) |
 | `max_iterations` | `null` | Stop after this many iterations (null = unlimited) |
 | `max_consecutive_rejections` | 3 | Pause and ask the user after this many failures in a row |
+| `iteration_timeout_min` | `120` | Max minutes per iteration before aborting (checked between phases) |
 | `allowed_categories` | `[]` | If non-empty, only explore these optimization categories |
 | `allowed_languages` | `[]` | If non-empty, only use these languages |
 | `focus_phase` | `null` | If set, prioritize this area of the codebase |
@@ -56,6 +83,22 @@ Read `rloop.config.json` for user-defined constraints:
 | `auto_push` | `false` | Automatically git push after committing (requires `auto_commit`) |
 | `branch_per_experiment` | `false` | Create a new branch for each experiment |
 | `branch_prefix` | `"experiment"` | Branch naming prefix (e.g. `experiment/1`, `experiment/2`) |
+| `mode` | `"full"` | Phase mode: `"full"`, `"plan+build+eval"`, `"build+eval"`, `"eval-only"` |
+
+## Token Tracking
+
+Track token usage throughout the session. Maintain a running count:
+- `session_tokens_in`: total input tokens across all agents this session
+- `session_tokens_out`: total output tokens across all agents this session
+- `iteration_tokens_in` / `iteration_tokens_out`: tokens for the current iteration
+
+After each subagent completes, check the token usage from the agent response and add it
+to the running totals. Log per-iteration tokens in the experiment log entry.
+
+Print a brief token update after each iteration:
+`"Iteration #N tokens: ~Xk in / ~Yk out | Session total: ~Xk in / ~Yk out"`
+
+Include totals in the Session Summary when the loop exits.
 
 ## The Loop
 
@@ -66,61 +109,53 @@ For each iteration:
 Before starting a new iteration, check:
 
 - **Iteration limit**: If `max_iterations` is set and you've completed that many iterations,
-  kill the keep-awake process, print the **Session Summary** (see below), and stop.
+  run **Cleanup** and stop.
 - **Target achieved**: Read `experiment_log.jsonl` — if the latest accepted metric meets or
-  exceeds `target_metric` (respecting `optimize` direction), kill the keep-awake process,
-  print the **Session Summary**, and stop.
+  exceeds `target_metric` (respecting `optimize` direction), run **Cleanup** and stop.
 - **Consecutive rejections**: If the last N experiments were all rejected or errored (where N =
-  `max_consecutive_rejections`), kill the keep-awake process, print the **Session Summary**,
+  `max_consecutive_rejections`), run **Cleanup**, print the **Session Summary**,
   then pause and ask the user what to try next. Do NOT continue autonomously — the loop is
-  stuck and needs human input. (Re-start keep-awake if the user provides new direction and
-  the loop resumes.)
+  stuck and needs human input. (Re-acquire the lock and re-start keep-awake if the user
+  provides new direction and the loop resumes.)
 
 If none of these apply, proceed.
 
-### Session Summary
+### 2. Re-read Configuration
 
-When the loop exits for any reason, read `experiment_log.jsonl` and print a summary of
-all experiments from this session. Format it as a table:
+Re-read `rloop.config.json` at the start of each iteration. The user may have changed
+settings mid-loop (e.g., adjusted `focus_phase`, changed `max_iterations`, switched `mode`).
 
-```
-═══════════════════════════════════════════════════════════════
-  rloop Session Summary
-═══════════════════════════════════════════════════════════════
+### 3. Read Current State
 
-  #   Status     Metric    Description
-  ─   ──────     ──────    ───────────
-  1   accepted   225.0s    baseline
-  2   accepted    98.3s    replace linear scans with hash lookups
-  3   rejected   102.1s    parallelize income classification
-  4   accepted    71.5s    remove redundant JSON serialization
-  5   failed       —       rewrite state apportioner (build error)
+Read `experiment_log.jsonl` to understand what's been tried and the current best metric.
 
-  Results: 3 accepted, 1 rejected, 1 failed
-  Best metric: 71.5s (from experiment #4)
-  Improvement: 225.0 → 71.5 (68.2% reduction)
+**Context management:** If the log has more than 20 entries, do NOT read the entire file
+into your context. Instead:
+- Read the **first entry** (baseline)
+- Read the **last 10 entries** (recent history)
+- Count total entries and summarize the middle as:
+  `"Experiments #2-#N: X accepted, Y rejected, Z failed. Categories tried: [list]. Best metric before recent window: <value>"`
 
-  Accepted branches: (if branch_per_experiment is true)
-    experiment/1  — baseline
-    experiment/2  — replace linear scans with hash lookups
-    experiment/4  — remove redundant JSON serialization
-═══════════════════════════════════════════════════════════════
-```
+This keeps the log from consuming too much context on long-running projects.
 
-Adapt the format to the `optimize` direction:
-- For `"minimize"`: show reduction percentage (e.g. "68.2% reduction")
-- For `"maximize"`: show increase percentage (e.g. "34.1% increase")
+### 4. Phase Execution
 
-Only include the "Accepted branches" section if `branch_per_experiment` is true.
-Only include the "Improvement" line if there are at least 2 accepted experiments.
+Execute phases based on the `mode` config:
 
-### 2. Read Current State
+**`"full"` (default)** — Research → Plan → Build → Evaluate
 
-- Read `experiment_log.jsonl` to understand what's been tried and the current best metric
-- Note any profiling or breakdown data — what area is the bottleneck?
-- Check how many experiments have been run and what categories have been explored
+**`"plan+build+eval"`** — Skip research. The user has provided research findings
+at `experiments/current/research.md`. Read it and proceed to Plan.
+If the file doesn't exist, tell the user and stop.
 
-### 3. Research Phase
+**`"build+eval"`** — Skip research and planning. The user has provided a plan
+at `experiments/current/plan.md`. Read it and proceed to Build.
+If the file doesn't exist, tell the user and stop.
+
+**`"eval-only"`** — Skip everything except evaluation. Useful for testing the
+test_prompt.md against the current code state. Proceed directly to Evaluate.
+
+#### Research Phase (if mode includes it)
 
 Spawn a subagent with the Agent tool:
 
@@ -131,7 +166,17 @@ Spawn a subagent with the Agent tool:
 
 Wait for the agent to complete. Read `experiments/current/research.md`.
 
-### 4. Plan Phase
+Note the start time of the iteration (record it once before the first phase).
+
+**Timeout behavior:** After each phase completes, check how long the iteration has been
+running. If it exceeds `iteration_timeout_min`, skip remaining phases, log the experiment
+as `"failed"` with notes `"iteration timeout after Xm"`, and proceed to Handle the Result.
+
+Note: The timeout is checked **between phases**, not during. If a build or test takes a long
+time, it will complete before the timeout is checked. Set this value with headroom above your
+expected build+test time. The default is 120 minutes.
+
+#### Plan Phase (if mode includes it)
 
 Spawn a subagent with the Agent tool:
 
@@ -142,8 +187,9 @@ Spawn a subagent with the Agent tool:
 > Write your plan to `experiments/current/plan.md`.
 
 Wait for the agent to complete. Read `experiments/current/plan.md`.
+Check elapsed time — if over `iteration_timeout_min`, abort iteration.
 
-### 5. Create Experiment Branch (if configured)
+#### Create Experiment Branch (if configured)
 
 If `branch_per_experiment` is true:
 ```bash
@@ -154,7 +200,7 @@ For example, with the default prefix: `experiment/1`, `experiment/2`, etc.
 
 If `branch_per_experiment` is false, stay on the current branch.
 
-### 6. Build Phase
+#### Build Phase (if mode includes it)
 
 Spawn a subagent with the Agent tool:
 
@@ -165,8 +211,9 @@ Spawn a subagent with the Agent tool:
 > Implement the plan and write your report to `experiments/current/build_report.md`.
 
 Wait for the agent to complete. Read `experiments/current/build_report.md`.
+Check elapsed time — if over `iteration_timeout_min`, abort iteration.
 
-### 7. Evaluate Phase
+#### Evaluate Phase (always runs)
 
 Spawn a subagent with the Agent tool:
 
@@ -179,7 +226,7 @@ Spawn a subagent with the Agent tool:
 
 Wait for the agent to complete. Read `experiments/current/eval_result.json`.
 
-### 8. Handle the Result
+### 5. Handle the Result
 
 Read `experiments/current/eval_result.json`. It must contain:
 
@@ -202,7 +249,9 @@ Read `experiments/current/eval_result.json`. It must contain:
   "description": "<one-line description from the plan>",
   "metric_value": <from eval_result>,
   "best_metric": <best accepted metric so far>,
-  "notes": "<from eval_result>"
+  "notes": "<from eval_result>",
+  "tokens_in": <iteration_tokens_in>,
+  "tokens_out": <iteration_tokens_out>
 }
 ```
 
@@ -250,7 +299,7 @@ If the file doesn't exist, start at 1. Get `git_sha` via `git rev-parse --short 
 
 Reset the consecutive rejection counter on any accepted experiment.
 
-### 9. Archive Artifacts
+### 6. Archive Artifacts
 
 ```bash
 mkdir -p experiments/archive/<experiment_id>
@@ -259,9 +308,57 @@ rm experiments/current/research.md experiments/current/plan.md \
    experiments/current/build_report.md experiments/current/eval_result.json
 ```
 
-### 10. Loop
+### 7. Loop
 
 Go back to step 1 (which checks stopping conditions before continuing).
+
+## Cleanup
+
+Run this on every exit path (stopping conditions met, errors, or user interruption):
+
+1. Kill the keep-awake process: `kill <saved_pid> 2>/dev/null`
+2. Remove the lock file: `rm -f .rloop.lock`
+3. Print the **Session Summary**
+
+## Session Summary
+
+When the loop exits for any reason, read `experiment_log.jsonl` and print a summary of
+all experiments from this session. Format it as a table:
+
+```
+═══════════════════════════════════════════════════════════════
+  rloop Session Summary
+═══════════════════════════════════════════════════════════════
+
+  #   Status     Metric    Description
+  ─   ──────     ──────    ───────────
+  1   accepted   225.0s    baseline
+  2   accepted    98.3s    replace linear scans with hash lookups
+  3   rejected   102.1s    parallelize income classification
+  4   accepted    71.5s    remove redundant JSON serialization
+  5   failed       —       rewrite state apportioner (build error)
+
+  Results: 3 accepted, 1 rejected, 1 failed
+  Best metric: 71.5s (from experiment #4)
+  Improvement: 225.0 → 71.5 (68.2% reduction)
+
+  Token usage: ~125k in / ~89k out (this session)
+
+  Accepted branches: (if branch_per_experiment is true)
+    experiment/1  — baseline
+    experiment/2  — replace linear scans with hash lookups
+    experiment/4  — remove redundant JSON serialization
+
+  Safety snapshot: rloop/snapshot-20260410-143022
+═══════════════════════════════════════════════════════════════
+```
+
+Adapt the format to the `optimize` direction:
+- For `"minimize"`: show reduction percentage (e.g. "68.2% reduction")
+- For `"maximize"`: show increase percentage (e.g. "34.1% increase")
+
+Only include the "Accepted branches" section if `branch_per_experiment` is true.
+Only include the "Improvement" line if there are at least 2 accepted experiments.
 
 ## Orchestrator Constraints
 
@@ -292,6 +389,9 @@ Read `rloop.config.json`. If present:
    - What has been tried? What worked, what failed?
    - What is the current best metric?
    - What categories have been explored? What hasn't been tried?
+   - **If the log has more than 20 entries**, only read the first entry and
+     the last 10 entries. Summarize the rest from the file structure
+     (count lines, check statuses) rather than reading every entry.
 
 2. **Explore the source code** (in the configured `src_dir`)
    - Understand the current architecture and language

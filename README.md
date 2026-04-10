@@ -236,11 +236,16 @@ notes = include comparison output and any warnings
 | `optimize` | `"minimize"` | `"minimize"` or `"maximize"` |
 | `target_metric` | `null` | Stop when metric reaches this |
 | `max_iterations` | `null` | Stop after N iterations |
-| `max_consecutive_rejections` | `3` | Pause after N failures |
+| `max_consecutive_rejections` | `3` | Pause after N failures in a row |
+| `iteration_timeout_min` | `120` | Abort iteration after N minutes (checked between phases) |
+| `mode` | `"full"` | `"full"`, `"plan+build+eval"`, `"build+eval"`, `"eval-only"` |
 | `allowed_categories` | `[]` | Restrict optimization types |
 | `allowed_languages` | `[]` | Restrict languages |
 | `focus_phase` | `null` | Prioritize an area |
 | `auto_commit` | `true` | Auto-commit accepted changes |
+| `auto_push` | `false` | Push after committing |
+| `branch_per_experiment` | `false` | Isolate each experiment on its own branch |
+| `branch_prefix` | `"experiment"` | Branch naming (e.g. `experiment/1`) |
 
 ## Optimization categories
 

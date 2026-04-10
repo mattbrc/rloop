@@ -16,14 +16,16 @@ At the end, print a summary report.
   - FAIL if invalid: `"rloop.config.json is not valid JSON."`
 - Check that all fields are recognized (warn on unknown fields — could be typos):
   Known fields: `src_dir`, `test_prompt`, `optimize`, `target_metric`, `max_iterations`,
-  `max_consecutive_rejections`, `allowed_categories`, `allowed_languages`, `focus_phase`,
-  `auto_commit`, `auto_push`, `branch_per_experiment`, `branch_prefix`
+  `max_consecutive_rejections`, `iteration_timeout_min`, `allowed_categories`,
+  `allowed_languages`, `focus_phase`, `auto_commit`, `auto_push`,
+  `branch_per_experiment`, `branch_prefix`, `mode`
   - WARN for each unknown field: `"Unknown config field: '<field>'. Typo?"`
 - Validate field values:
   - `optimize` must be `"minimize"` or `"maximize"` → FAIL if not
   - `max_iterations` must be null or a positive integer → FAIL if not
   - `target_metric` must be null or a number → FAIL if not
   - `max_consecutive_rejections` must be a positive integer → FAIL if not
+  - `iteration_timeout_min` must be a positive number → FAIL if not
   - `allowed_categories` must be an array → FAIL if not
   - `allowed_languages` must be an array → FAIL if not
   - `auto_commit` must be a boolean → FAIL if not
@@ -31,6 +33,9 @@ At the end, print a summary report.
   - If `auto_push` is true and `auto_commit` is false → WARN: `"auto_push has no effect when auto_commit is false"`
   - `branch_per_experiment` must be a boolean → FAIL if not
   - `branch_prefix` must be a string → FAIL if not
+  - `mode` must be one of `"full"`, `"plan+build+eval"`, `"build+eval"`, `"eval-only"` → FAIL if not
+  - If `mode` is `"plan+build+eval"`, check that `experiments/current/research.md` exists → WARN if missing: `"mode is plan+build+eval but no research.md found. Place your research at experiments/current/research.md before running."`
+  - If `mode` is `"build+eval"`, check that `experiments/current/plan.md` exists → WARN if missing: `"mode is build+eval but no plan.md found. Place your plan at experiments/current/plan.md before running."`
 
 ### 2. Source Directory
 
@@ -53,7 +58,15 @@ At the end, print a summary report.
   - WARN if no mention of `eval_result.json` or `metric_value`: `"Test prompt doesn't mention eval_result.json or metric_value. The eval agent may not know how to report results."`
   - WARN if no mention of pass/fail criteria: `"Test prompt doesn't describe pass/fail criteria."`
 
-### 4. Git State
+### 4. Lock File
+
+- Check if `.rloop.lock` exists
+  - If it exists, read it and check if the PID is still running: `kill -0 <pid> 2>/dev/null`
+  - If running: WARN: `"rloop is currently running (PID <pid>, started <started_at>). Cannot start another session."`
+  - If not running: WARN: `"Stale lock file found from a previous session. Will be cleaned up on next /rloop run."`
+  - If it doesn't exist: PASS
+
+### 5. Git State
 
 - Check that the current directory is a git repo
   - FAIL if not: `"Not a git repository. rloop needs git for commit/rollback."`
@@ -69,7 +82,7 @@ At the end, print a summary report.
   - Check that a remote is configured: `git remote -v`
   - WARN if no remote: `"auto_push is enabled but no git remote is configured."`
 
-### 5. Experiment Log
+### 6. Experiment Log
 
 - If `experiment_log.jsonl` exists:
   - Check it's valid (each line is valid JSON)
@@ -78,20 +91,20 @@ At the end, print a summary report.
 - If it doesn't exist:
   - PASS: `"No experiment log yet. First run will create it."`
 
-### 6. Experiments Directory
+### 7. Experiments Directory
 
 - Check that `experiments/current/` exists (or can be created)
 - WARN if `experiments/current/` contains leftover files from a previous run:
   `"experiments/current/ has leftover files. These will be overwritten. Consider archiving them."`
 
-### 7. Build Smoke Test (Quick)
+### 8. Build Smoke Test (Quick)
 
 - Try to identify the build system in `src_dir`:
   - Look for .csproj, go.mod, Cargo.toml, package.json, Makefile, pyproject.toml, etc.
   - PASS if found: `"Build system detected: <type>"`
   - WARN if not found: `"No recognized build system in '<src_dir>'. Make sure your test_prompt.md includes build instructions."`
 
-### 8. Permissions
+### 9. Permissions
 
 - Check if `.claude/settings.json` exists in the project root
   - If missing: WARN: `"No permissions configured. rloop will prompt for every action. Run /rloop-init to set up permissions, or create .claude/settings.json manually."`
@@ -115,6 +128,7 @@ Print the summary report:
   Config file          PASS   Valid JSON, all fields recognized
   Source directory      PASS   src/ — C# (.csproj detected)
   Test prompt          PASS   test_prompt.md — 4 steps, has commands
+  Lock file            PASS   No active session
   Git state            WARN   Working tree has uncommitted changes
   Experiment log       PASS   No log yet, first run will create it
   Experiments dir      PASS   experiments/current/ ready

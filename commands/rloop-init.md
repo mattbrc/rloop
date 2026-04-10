@@ -63,13 +63,15 @@ Based on their answers, generate these files:
   "target_metric": null,
   "max_iterations": null,
   "max_consecutive_rejections": 3,
+  "iteration_timeout_min": 120,
   "allowed_categories": [],
   "allowed_languages": [],
   "focus_phase": null,
   "auto_commit": true,
   "auto_push": false,
   "branch_per_experiment": false,
-  "branch_prefix": "experiment"
+  "branch_prefix": "experiment",
+  "mode": "full"
 }
 ```
 
@@ -128,10 +130,13 @@ mkdir -p experiments/current experiments/archive
 
 #### `.gitignore` additions
 
-If a `.gitignore` exists, suggest adding (don't add without asking):
+Check if `.gitignore` exists. If it does, read it. If these entries are missing, add them:
 ```
 experiments/current/
+.rloop.lock
 ```
+If `.gitignore` doesn't exist, create it with these entries.
+Tell the user what was added.
 
 ### 5. Show the summary
 
@@ -166,6 +171,14 @@ How to control the loop (edit rloop.config.json anytime):
 
   Safety net:
     "max_consecutive_rejections": 3  ← pauses and asks you after 3 failures in a row
+    "iteration_timeout_min": 120     ← abort an iteration if it takes longer than 2 hours
+                                       (checked between phases, not during — set with headroom)
+
+  Mode:
+    "mode": "full"             ← (default) Research → Plan → Build → Evaluate
+    "mode": "plan+build+eval"  ← you provide the research, agent plans + builds
+    "mode": "build+eval"       ← you provide the plan, agent just builds + evaluates
+    "mode": "eval-only"        ← just test current code (useful for testing your test_prompt)
 
   Focus:
     "focus_phase": null              ← agent chooses what to optimize
