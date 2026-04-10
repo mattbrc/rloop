@@ -244,17 +244,35 @@ notes = include comparison output and any warnings
 
 ## Optimization categories
 
-These are the categories the research agent uses to classify optimization approaches:
+These are the categories the research agent uses to classify optimization approaches.
+Use `allowed_categories` in config to restrict which ones the agent explores.
 
+**Performance**
 - **caching** — memoization, precomputation, lookup tables
 - **parallelism** — concurrent processing, goroutines, threads
-- **algorithm_complexity** — better big-O, smarter data structures
+- **algorithm_complexity** — better big-O, smarter algorithms
 - **data_structure** — hash maps vs lists, adjacency lists, indexes
 - **allocation_reduction** — pooling, in-place mutation, fewer copies
 - **lazy_evaluation** — defer work until needed
 - **batch_processing** — vectorize, bulk operations
+- **memory_optimization** — data layout, cache locality, memory-mapped I/O
+- **profiling_guided** — optimizations driven by profiler or flame graph data
+
+**Architecture**
 - **architectural_restructuring** — reorder pipeline, early termination
 - **language_rewrite** — rewrite in a faster language
-- **io_optimization** — faster serialization, streaming, buffering
+- **io_optimization** — faster parsing, streaming, buffering
+- **serialization** — schema changes, format optimization, compression
+- **dependency_optimization** — replacing heavy libs, removing unnecessary deps
+- **code_simplification** — removing dead code, reducing complexity
 
-Use `allowed_categories` in config to restrict which ones the agent explores.
+**Correctness & Reliability**
+- **correctness_fix** — bug fixes that improve accuracy or pass rate
+- **error_handling** — retry logic, fallback strategies, recovery paths
+- **concurrency_safety** — fixing races, deadlocks, contention
+
+**Tuning**
+- **configuration_tuning** — adjusting thresholds, parameters, hyperparameters
+- **model_tuning** — hyperparameters, feature selection, training strategies
+
+These are not exhaustive — the research agent can define its own category if none fit.

@@ -315,7 +315,11 @@ Read `rloop.config.json`. If present:
    - Expected impact estimate
    - Optimization category (one of: caching, parallelism, algorithm_complexity,
      data_structure, allocation_reduction, lazy_evaluation, batch_processing,
-     architectural_restructuring, language_rewrite, io_optimization)
+     architectural_restructuring, language_rewrite, io_optimization,
+     configuration_tuning, memory_optimization, error_handling,
+     dependency_optimization, code_simplification, correctness_fix,
+     model_tuning, concurrency_safety, serialization, profiling_guided)
+     If none of these fit, define your own — these are not exhaustive.
 
 ### Research Constraints
 
