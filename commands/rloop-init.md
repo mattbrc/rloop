@@ -191,4 +191,56 @@ You can change these between runs or even mid-loop (the orchestrator
 re-reads the config at the start of each iteration).
 ```
 
+### 6. Configure permissions
+
+rloop runs autonomously with subagents that read files, edit code, and run shell commands.
+Without pre-configured permissions, Claude Code will prompt for approval on every action,
+which defeats the purpose.
+
+Ask the user:
+> "rloop needs permissions to read/write files, run build and test commands, and manage git.
+> Want me to configure these permissions for this project so the loop can run autonomously?"
+
+If they say yes, check if `.claude/settings.json` exists in the project root.
+If it exists, read it first and merge the permissions. If not, create it.
+
+Determine which build/test commands are needed based on the detected language and
+the commands in `test_prompt.md`. Then write `.claude/settings.json`:
+
+```json
+{
+  "permissions": {
+    "allow": [
+      "Read",
+      "Write",
+      "Edit",
+      "Glob",
+      "Grep",
+      "Bash(git *)",
+      "Bash(mkdir *)",
+      "Bash(cp *)",
+      "Bash(rm experiments/*)",
+      "Bash(caffeinate *)",
+      "Bash(kill *)"
+    ]
+  }
+}
+```
+
+Then add language-specific permissions based on what you detected:
+- C#/.NET: add `"Bash(dotnet *)"`
+- Go: add `"Bash(go *)"`
+- Rust: add `"Bash(cargo *)"`
+- Python: add `"Bash(python *)"`  and `"Bash(python3 *)"`
+- Node.js: add `"Bash(npm *)"` and `"Bash(node *)"`
+- Makefile: add `"Bash(make *)"`
+
+Also scan `test_prompt.md` for any other commands the eval agent will need to run
+and add those too.
+
+If they say no, tell them:
+> "No problem. Claude Code will ask for permission as it goes. You can choose
+> 'always allow' when prompted to avoid repeated approvals, or configure
+> permissions later in `.claude/settings.json`."
+
 Ask if they want to adjust anything before they start.

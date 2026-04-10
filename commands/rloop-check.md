@@ -91,6 +91,18 @@ At the end, print a summary report.
   - PASS if found: `"Build system detected: <type>"`
   - WARN if not found: `"No recognized build system in '<src_dir>'. Make sure your test_prompt.md includes build instructions."`
 
+### 8. Permissions
+
+- Check if `.claude/settings.json` exists in the project root
+  - If missing: WARN: `"No permissions configured. rloop will prompt for every action. Run /rloop-init to set up permissions, or create .claude/settings.json manually."`
+  - If present, read it and check:
+    - Are `Read`, `Write`, `Edit`, `Glob`, `Grep` in the allow list? WARN if any missing.
+    - Are `Bash(git *)` and `Bash(mkdir *)` allowed? WARN if missing.
+    - Are build commands for the detected language allowed? (e.g. `Bash(dotnet *)` for C#)
+      WARN if missing: `"Build command 'dotnet' not in permissions. The loop will prompt for approval."`
+    - Scan `test_prompt.md` for commands that may need permissions and check those too.
+  - PASS if all needed permissions are configured: `"Permissions configured for autonomous operation."`
+
 ## Report
 
 Print the summary report:
@@ -107,6 +119,7 @@ Print the summary report:
   Experiment log       PASS   No log yet, first run will create it
   Experiments dir      PASS   experiments/current/ ready
   Build system         PASS   Detected: dotnet (.csproj)
+  Permissions          PASS   Configured for autonomous operation
 
   ─────────────────────────────────────────────────────────────
   Result: 6 passed, 1 warning, 0 failed
