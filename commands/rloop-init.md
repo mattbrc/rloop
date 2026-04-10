@@ -38,6 +38,15 @@ Ask all of these in a **single message**. Be concise.
    - Beyond the metric number, what qualitative checks should pass?
      (e.g., no error lines in logs, no data corruption warnings, no regressions
      in specific categories)
+   - **Are there any setup steps required before testing?** For example:
+     - Database migrations or stored procedures that need to be applied
+     - Config files that need updating
+     - Services that need restarting
+     - Data that needs seeding or refreshing
+     - Infrastructure changes (Redis flush, queue purge, etc.)
+   
+   These pre-test steps go into `test_prompt.md` so the eval agent handles them
+   automatically before running the actual tests.
 
    Explain the two-gate system:
    > "rloop uses two gates to accept an experiment. First, the eval agent follows your
