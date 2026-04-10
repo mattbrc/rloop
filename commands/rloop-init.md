@@ -47,7 +47,28 @@ Ask all of these in a **single message**. Be concise.
    > So even if accuracy goes up, the experiment fails if the agent spotted data corruption
    > in the logs. This gives you precise control over what 'good' means."
 
-5. **Any constraints?** (languages to restrict to, optimization categories to focus on, iteration limit, target metric value)
+5. **What's the core problem you're trying to solve?** Ask the user to describe the
+   business problem or technical challenge in a sentence or two. For example:
+   - "Our data pipeline takes 4 hours to process daily imports"
+   - "Model accuracy drops below 90% on edge cases"
+   - "The API p99 latency spikes under load"
+
+   Based on their answer AND what you found exploring the repo, recommend which
+   optimization categories are most relevant. Show them your reasoning:
+
+   > "Based on your codebase (C#/.NET, heavy I/O, sequential pipeline) and your goal
+   > (reduce pipeline runtime), I'd recommend focusing on: **parallelism**,
+   > **io_optimization**, **batch_processing**, and **caching**. Want me to restrict
+   > the agent to these, or leave it open to explore anything?"
+
+   If the user's problem doesn't fit any existing category, propose a new one:
+   > "Your use case around compliance validation doesn't fit the standard categories.
+   > I'd suggest creating a custom category: **validation_logic** — improving rule
+   > evaluation accuracy and coverage. The research agent can use custom categories."
+
+   Let the user confirm, adjust, or say "leave it open" (empty `allowed_categories`).
+
+6. **Any other constraints?** (languages to restrict to, iteration limit, target metric value)
 
 ### 4. Generate the files
 
