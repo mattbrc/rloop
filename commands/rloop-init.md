@@ -142,6 +142,17 @@ Guidelines for writing a good test prompt:
 - If multiple commands produce output that needs analysis, tell the agent what to save
   and reference between steps
 
+Token efficiency tips for test prompts:
+- **Pipe verbose commands through tail/grep** — instead of `dotnet run ...`, use
+  `dotnet run ... 2>&1 | tail -50` to cap output the agent has to read
+- **Redirect logs to files, grep what matters** — instead of having the agent read
+  raw log output, use `command > /tmp/step1.log 2>&1` then `grep -c ERROR /tmp/step1.log`
+  to check for errors without reading the whole log
+- **Extract metrics with CLI tools** — instead of having the agent parse freeform output,
+  use `grep -oP 'Accuracy: \K[0-9.]+' /tmp/output.log` to extract the number directly
+- **Avoid dumping entire outputs** — tell the agent to only capture the last N lines or
+  specific patterns, not the full command output
+
 #### `experiments/` directory
 
 Create the directory structure:

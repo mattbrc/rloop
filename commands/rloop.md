@@ -155,39 +155,45 @@ If the file doesn't exist, tell the user and stop.
 **`"eval-only"`** — Skip everything except evaluation. Useful for testing the
 test_prompt.md against the current code state. Proceed directly to Evaluate.
 
-#### Research Phase (if mode includes it)
-
-Spawn a subagent with the Agent tool:
-
-> You are the research agent for rloop. Read the "Research Agent Instructions"
-> section of the `/rloop` command prompt. To find it: read the file at
-> `~/.claude/commands/rloop.md`. Then perform your research task.
-> Write your findings to `experiments/current/research.md`.
-
-Wait for the agent to complete. Read `experiments/current/research.md`.
-
 Note the start time of the iteration (record it once before the first phase).
 
 **Timeout behavior:** After each phase completes, check how long the iteration has been
 running. If it exceeds `iteration_timeout_min`, skip remaining phases, log the experiment
 as `"failed"` with notes `"iteration timeout after Xm"`, and proceed to Handle the Result.
+The timeout is checked **between phases**, not during. Set with headroom above your
+expected build+test time. Default is 120 minutes.
 
-Note: The timeout is checked **between phases**, not during. If a build or test takes a long
-time, it will complete before the timeout is checked. Set this value with headroom above your
-expected build+test time. The default is 120 minutes.
+**Token optimization — subagent prompts:** Do NOT tell subagents to read
+`~/.claude/commands/rloop.md` — that file is large and each agent only needs its own
+section. Instead, read the relevant "Agent Instructions" section from this file yourself
+and **inline it directly** into the subagent's spawn prompt. This avoids each agent
+loading the full orchestrator file (~500 lines) just to find its ~30 lines.
+
+#### Research Phase (if mode includes it)
+
+Read the "Research Agent Instructions" section below. Spawn a subagent with the
+Agent tool, inlining those instructions in the prompt along with:
+- The path to `rloop.config.json`
+- The current experiment_id
+- A brief context line: the current best metric and how many experiments have been run
+
+Wait for the agent to complete. Read `experiments/current/research.md`.
+Check elapsed time — if over `iteration_timeout_min`, abort iteration.
+
+**Orchestrator reads:** Only read the **Target area**, **Recommended approach**, and
+**Optimization category** lines from research.md — skim for the decision, not the full analysis.
 
 #### Plan Phase (if mode includes it)
 
-Spawn a subagent with the Agent tool:
-
-> You are the planning agent for rloop. Read the "Plan Agent Instructions"
-> section of the `/rloop` command prompt. To find it: read the file at
-> `~/.claude/commands/rloop.md`.
-> The research memo is at `experiments/current/research.md`. Read it first.
-> Write your plan to `experiments/current/plan.md`.
+Read the "Plan Agent Instructions" section below. Spawn a subagent with the
+Agent tool, inlining those instructions in the prompt along with:
+- The path to `experiments/current/research.md`
 
 Wait for the agent to complete. Read `experiments/current/plan.md`.
 Check elapsed time — if over `iteration_timeout_min`, abort iteration.
+
+**Orchestrator reads:** Only read the **one-line description** and **files to modify** —
+you need the description for the commit message and experiment log, not the full step-by-step.
 
 #### Create Experiment Branch (if configured)
 
@@ -202,29 +208,25 @@ If `branch_per_experiment` is false, stay on the current branch.
 
 #### Build Phase (if mode includes it)
 
-Spawn a subagent with the Agent tool:
-
-> You are the build agent for rloop. Read the "Build Agent Instructions"
-> section of the `/rloop` command prompt. To find it: read the file at
-> `~/.claude/commands/rloop.md`.
-> The implementation plan is at `experiments/current/plan.md`. Read it first.
-> Implement the plan and write your report to `experiments/current/build_report.md`.
+Read the "Build Agent Instructions" section below. Spawn a subagent with the
+Agent tool, inlining those instructions in the prompt along with:
+- The path to `experiments/current/plan.md`
 
 Wait for the agent to complete. Read `experiments/current/build_report.md`.
 Check elapsed time — if over `iteration_timeout_min`, abort iteration.
 
+**Orchestrator reads:** Only read the **summary** and **deviations** — skip the details
+unless there's a deviation that changes the experiment description.
+
 #### Evaluate Phase (always runs)
 
-Spawn a subagent with the Agent tool:
-
-> You are the evaluation agent for rloop. Read the "Evaluate Agent Instructions"
-> section of the `/rloop` command prompt. To find it: read the file at
-> `~/.claude/commands/rloop.md`.
-> Then read `test_prompt.md` (or the path specified in `rloop.config.json` under `test_prompt`)
-> for the project-specific test procedure.
-> Execute the test procedure and write your result to `experiments/current/eval_result.json`.
+Read the "Evaluate Agent Instructions" section below. Spawn a subagent with the
+Agent tool, inlining those instructions in the prompt along with:
+- The path to the test prompt file (from config, default `test_prompt.md`)
 
 Wait for the agent to complete. Read `experiments/current/eval_result.json`.
+
+**Orchestrator reads:** This is just the JSON file — small by design.
 
 ### 5. Handle the Result
 
@@ -439,6 +441,12 @@ Read `rloop.config.json`. If present:
 - Do NOT run tests — that's the evaluator's job
 - Be specific about which files and functions are involved
 - Check the experiment log to avoid recommending approaches that already failed
+- **Keep research.md concise** — aim for under 100 lines. Lead with the recommendation,
+  not the analysis. The orchestrator only reads the target area, recommended approach,
+  and category. Detailed analysis is for the plan agent.
+- **Don't re-read unchanged code** — if previous research already analyzed a file and
+  it hasn't been modified since (check git status), reference the previous analysis
+  instead of re-reading the entire file
 
 ---
 
@@ -476,6 +484,8 @@ for the optimization identified by the researcher.
 - Do NOT run tests
 - The plan must be specific enough for the builder to execute without ambiguity
 - One focused optimization per plan — don't batch unrelated changes
+- **Keep plan.md concise** — aim for under 80 lines. The builder needs exact file paths,
+  what to change, and step order. Skip lengthy justifications — those are in the research memo.
 
 ---
 
@@ -506,6 +516,8 @@ You are the build agent. Your job is to execute the implementation plan.
 - Follow the plan. If the plan has a clear error, note it in the report
 - Do NOT run tests — that's the evaluator's job
 - Do NOT modify config files or test prompts
+- **Keep build_report.md short** — under 30 lines. Just: what changed, deviations (if any),
+  concerns (if any). Don't repeat the plan or list every line you edited.
 
 ---
 
@@ -547,3 +559,6 @@ and determine whether they pass and what the metric value is.
 - Do NOT modify source code — evaluation only
 - Do NOT skip any test steps defined in the test prompt
 - Always write `eval_result.json` even if tests crash — set `passed: false` and explain in `notes`
+- **Keep `notes` concise** — under 20 lines. Include the metric value, pass/fail result,
+  and key observations. Do NOT dump entire log files or command output into notes.
+  If there are errors, include only the relevant error lines, not the full log.
