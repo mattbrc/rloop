@@ -15,7 +15,7 @@ Tell Claude Code:
 
 > Fetch the rloop commands from https://github.com/mattbrc/rloop and install them to ~/.claude/commands/
 
-### Or manually
+### Or manually (curl)
 
 ```bash
 mkdir -p ~/.claude/commands
@@ -23,6 +23,14 @@ curl -sL https://raw.githubusercontent.com/mattbrc/rloop/main/commands/rloop.md 
 curl -sL https://raw.githubusercontent.com/mattbrc/rloop/main/commands/rloop-init.md -o ~/.claude/commands/rloop-init.md
 curl -sL https://raw.githubusercontent.com/mattbrc/rloop/main/commands/rloop-check.md -o ~/.claude/commands/rloop-check.md
 curl -sL https://raw.githubusercontent.com/mattbrc/rloop/main/commands/rloop-update.md -o ~/.claude/commands/rloop-update.md
+```
+
+### If curl is blocked (clone + copy)
+
+```bash
+git clone https://github.com/mattbrc/rloop.git /tmp/rloop
+cp /tmp/rloop/commands/*.md ~/.claude/commands/
+rm -rf /tmp/rloop
 ```
 
 ### Update

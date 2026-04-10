@@ -13,13 +13,25 @@ ls -la ~/.claude/commands/rloop*.md
 
 ### 2. Download the latest versions
 
-Fetch each command file from the GitHub repo:
+Try fetching via curl first. If curl fails (blocked network, 403, timeout), fall back to git clone.
 
+**Primary method (curl):**
 ```bash
 curl -sL https://raw.githubusercontent.com/mattbrc/rloop/main/commands/rloop.md -o /tmp/rloop.md
 curl -sL https://raw.githubusercontent.com/mattbrc/rloop/main/commands/rloop-init.md -o /tmp/rloop-init.md
 curl -sL https://raw.githubusercontent.com/mattbrc/rloop/main/commands/rloop-check.md -o /tmp/rloop-check.md
 curl -sL https://raw.githubusercontent.com/mattbrc/rloop/main/commands/rloop-update.md -o /tmp/rloop-update.md
+```
+
+**Fallback (git clone):**
+If any curl command fails or the downloaded files are empty/HTML error pages:
+```bash
+git clone https://github.com/mattbrc/rloop.git /tmp/rloop-repo
+cp /tmp/rloop-repo/commands/rloop.md /tmp/rloop.md
+cp /tmp/rloop-repo/commands/rloop-init.md /tmp/rloop-init.md
+cp /tmp/rloop-repo/commands/rloop-check.md /tmp/rloop-check.md
+cp /tmp/rloop-repo/commands/rloop-update.md /tmp/rloop-update.md
+rm -rf /tmp/rloop-repo
 ```
 
 ### 3. Check for differences
