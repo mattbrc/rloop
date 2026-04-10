@@ -13,15 +13,16 @@ rejects regressions, stops when it hits your target or gets stuck.
 
 Tell Claude Code:
 
-> Install rloop from this repo — copy the command files to ~/.claude/commands/
+> Fetch the rloop commands from https://github.com/mattbrc/rloop and install them to ~/.claude/commands/
 
-Or manually:
+### Or manually
 
 ```bash
-git clone https://github.com/fortyau/rloop.git
-cp rloop/commands/rloop-init.md ~/.claude/commands/
-cp rloop/commands/rloop-check.md ~/.claude/commands/
-cp rloop/commands/rloop.md ~/.claude/commands/
+mkdir -p ~/.claude/commands
+curl -sL https://raw.githubusercontent.com/mattbrc/rloop/main/commands/rloop.md -o ~/.claude/commands/rloop.md
+curl -sL https://raw.githubusercontent.com/mattbrc/rloop/main/commands/rloop-init.md -o ~/.claude/commands/rloop-init.md
+curl -sL https://raw.githubusercontent.com/mattbrc/rloop/main/commands/rloop-check.md -o ~/.claude/commands/rloop-check.md
+curl -sL https://raw.githubusercontent.com/mattbrc/rloop/main/commands/rloop-update.md -o ~/.claude/commands/rloop-update.md
 ```
 
 ### Update

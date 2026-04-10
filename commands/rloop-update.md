@@ -16,10 +16,10 @@ ls -la ~/.claude/commands/rloop*.md
 Fetch each command file from the GitHub repo:
 
 ```bash
-curl -sL https://raw.githubusercontent.com/fortyau/rloop/main/commands/rloop.md -o /tmp/rloop.md
-curl -sL https://raw.githubusercontent.com/fortyau/rloop/main/commands/rloop-init.md -o /tmp/rloop-init.md
-curl -sL https://raw.githubusercontent.com/fortyau/rloop/main/commands/rloop-check.md -o /tmp/rloop-check.md
-curl -sL https://raw.githubusercontent.com/fortyau/rloop/main/commands/rloop-update.md -o /tmp/rloop-update.md
+curl -sL https://raw.githubusercontent.com/mattbrc/rloop/main/commands/rloop.md -o /tmp/rloop.md
+curl -sL https://raw.githubusercontent.com/mattbrc/rloop/main/commands/rloop-init.md -o /tmp/rloop-init.md
+curl -sL https://raw.githubusercontent.com/mattbrc/rloop/main/commands/rloop-check.md -o /tmp/rloop-check.md
+curl -sL https://raw.githubusercontent.com/mattbrc/rloop/main/commands/rloop-update.md -o /tmp/rloop-update.md
 ```
 
 ### 3. Check for differences
@@ -54,7 +54,7 @@ cp /tmp/rloop-update.md ~/.claude/commands/rloop-update.md
 Check if there are any new command files in the repo that aren't installed locally.
 Fetch the directory listing:
 ```bash
-curl -sL https://api.github.com/repos/fortyau/rloop/contents/commands
+curl -sL https://api.github.com/repos/mattbrc/rloop/contents/commands
 ```
 
 If there are new `.md` files not in `~/.claude/commands/`, download and install them too.
